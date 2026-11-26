@@ -198,7 +198,6 @@ fn enigo_key(key: &Key) -> Option<EKey> {
         Key::Escape => EKey::Escape,
         Key::Backspace => EKey::Backspace,
         Key::Delete => EKey::Delete,
-        Key::Insert => EKey::Insert,
         Key::Home => EKey::Home,
         Key::End => EKey::End,
         Key::PageUp => EKey::PageUp,
@@ -209,8 +208,7 @@ fn enigo_key(key: &Key) -> Option<EKey> {
         Key::Right => EKey::RightArrow,
         Key::Space => EKey::Space,
         Key::CapsLock => EKey::CapsLock,
-        Key::PrintScreen => EKey::PrintScr,
-        Key::Menu => return None,
+        Key::Menu | Key::Insert | Key::PrintScreen => return None,
         Key::F(n) => match n {
             1 => EKey::F1,
             2 => EKey::F2,
