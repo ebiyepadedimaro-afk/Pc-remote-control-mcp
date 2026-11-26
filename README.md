@@ -79,9 +79,21 @@ Prebuilt server binaries are published for each release
 | macOS Intel | `pcrc-server-macos-x86_64.tar.gz` |
 | Windows x86_64 | `pcrc-server-windows-x86_64.zip` |
 
-Extract the archive, put `pcrc-server` (or `pcrc-server.exe`) on `PATH` (on Linux/macOS:
-`install -m755 pcrc-server ~/.local/bin/`), then run `pcrc-server`. The desktop UI is the nsh app in `ui/`:
-`nsh run ./ui --target linux|macos|windows` (or package it with `nsh package`).
+### Installers
+
+Each release also carries ready-to-install desktop packages built in CI:
+
+| Platform | Package | What it installs |
+|---|---|---|
+| Linux | `pc-remote-control_<version>_amd64.deb` | `/usr/bin/pcrc-server`, the nsh desktop app under `/opt/pc-remote-control`, an application-menu entry and icon. Install with `sudo apt install ./pc-remote-control_<version>_amd64.deb` (depends on GTK 4). |
+| Windows | `PC-Remote-Control-Setup-<version>.exe` | Per-user Inno Setup installer: the desktop app (`PCRemoteControl.exe` + nsh bundle), `pcrc-server.exe`, Start-menu/desktop shortcuts, and the install folder added to the user `PATH` (no admin needed). A `*-windows-portable.zip` is published too. |
+| macOS | `PC-Remote-Control-<version>-macos-x86_64.dmg` | The `.app` with the server bundled in `Contents/Resources`; drag it to Applications. Ad-hoc signed, so right-click → Open the first time (Gatekeeper). |
+
+Standalone server binaries (`pcrc-server-*`) are still published for headless installs: extract one, put it on
+`PATH` (on Linux/macOS: `install -m755 pcrc-server ~/.local/bin/`), then run `pcrc-server`. The desktop UI source is
+the nsh app in `ui/` (`nsh run ./ui --target linux|macos|windows`).
+
+The desktop app installs its own update banner: it checks releases and offers the matching installer/asset.
 
 ### Bundled tunnel clients
 
@@ -355,6 +367,10 @@ Four pages:
 
 `cd ui && nsh check && nsh test && nsh build` validates the app. `nsh package` produces installable packages per nsh's
 signing/packaging flow.
+
+The window is titled **PC Remote Control** and **closing it hides it to the system tray** (menu bar on macOS,
+notification area on Windows, AppIndicator on Linux). Click the tray icon to restore it; the tray menu has Show
+window, Hide window and Quit. A second launch focuses the running instance (`singleInstance`).
 
 **App icon:** `ui/assets/icon.png` (1024×1024, with 512/256 and `.ico` exports in the same folder). `ui/nsh.json`
 declares `"icon": "assets/icon.png"`, so `nsh package --target linux|macos|windows` embeds it: the Linux package

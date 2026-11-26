@@ -1,5 +1,7 @@
-import { effect, mount, signal, Scroll, Text, View } from "nsh";
+import { effect, Image, mount, Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
+import { currentWindow, Tray, Window } from "nsh/desktop";
+import appIcon from "./assets/icon.png";
 import { phaseLabel } from "./src/format";
 import AboutPage from "./src/pages/About";
 import LogsPage from "./src/pages/Logs";
@@ -14,10 +16,46 @@ const TABS = [
   { id: "about", label: "About" },
 ];
 
+function showMainWindow() {
+  const win = Window.get("main");
+  if (win) {
+    win.show();
+    win.focus();
+  }
+}
+
 function App() {
   const tab = signal("server");
   void init();
   const running = () => status() !== null;
+  const win = currentWindow();
+
+  effect(() => {
+    win.set({
+      title: "PC Remote Control",
+      minSize: { width: 460, height: 620 },
+      closeOnPress: false,
+      closeOnEscape: false,
+    });
+    win.setBounds({ size: { width: 560, height: 900 } });
+    const stop = win.on("closePress", () => win.hide());
+    return () => stop();
+  });
+
+  effect(() => {
+    Tray.set({
+      icon: appIcon,
+      tooltip: "PC Remote Control — MCP server",
+      onClick: showMainWindow,
+      menu: [
+        { label: "Show window", onSelect: showMainWindow },
+        { label: "Hide window", onSelect: () => win.hide() },
+        { type: "separator" },
+        { label: "Quit PC Remote Control", role: "quit" },
+      ],
+    });
+    return () => Tray.set(null);
+  });
   let content: any = null;
   let hadStatus = false;
   effect(() => {
@@ -35,21 +73,28 @@ function App() {
 
   return (
     <View class="flex-1 bg-background text-foreground">
-      <View class="flex-row items-center gap-3 border-b border-border px-5 py-3">
-        <Text class="text-lg font-semibold text-foreground">PC Remote Control</Text>
-        <View class="flex-row items-center gap-1.5">
+      <View class="flex-row items-center gap-3 border-b border-border px-4 py-3">
+        <Image src={appIcon} class="h-8 w-8 rounded-lg" />
+        <View class="gap-0.5">
+          <Text class="text-base font-semibold text-foreground">PC Remote Control</Text>
+          <Text class="text-[11px] text-muted-foreground">MCP desktop remote</Text>
+        </View>
+        <View class="flex-row items-center gap-1.5 rounded-full border border-border px-2 py-0.5">
           <View
             class={`h-2 w-2 rounded-full ${running() ? "bg-[#22c55e]" : phase() === "starting" ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`}
           />
           <Text class="text-xs text-muted-foreground">{phaseLabel(phase())}</Text>
         </View>
         <View class="flex-1" />
-        <Text class="text-xs text-muted-foreground">
-          {status() ? `MCP · port ${status()!.port}` : "MCP server stopped"}
-        </Text>
+        <Button
+          class="rounded-md border border-border px-2 py-1 hover:bg-accent"
+          onPress={() => win.hide()}
+        >
+          <Text class="text-xs text-muted-foreground">Hide to tray</Text>
+        </Button>
       </View>
 
-      <View class="flex-row gap-1 border-b border-border px-5 pb-2 pt-3">
+      <View class="flex-row gap-1 border-b border-border px-4 pb-2 pt-2">
         <Each of={TABS} key={(t) => t.id}>
           {(t) => (
             <Button
@@ -63,17 +108,14 @@ function App() {
         </Each>
       </View>
 
-      <View class="flex-1 gap-3 px-5 py-4">
+      <View class="flex-1 gap-3 px-4 py-4">
         <If when={updateInfo()?.available && updateDismissed() !== String(updateInfo()?.latest)}>
-          <View class="rounded-lg border border-[#2563eb]/40 bg-[#2563eb]/10 px-3 py-2 gap-2">
+          <View class="gap-2 rounded-lg border border-[#2563eb]/40 bg-[#2563eb]/10 px-3 py-2">
             <Text class="text-xs text-[#93c5fd]">
               Update available: v{String(updateInfo()?.latest ?? "")} (current v{String(updateInfo()?.current ?? "")}).
             </Text>
-            <View class="flex-row gap-2">
-              <Button
-                class="rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90"
-                onPress={() => void openUpdate()}
-              >
+            <View class="flex-row flex-wrap gap-2">
+              <Button class="rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90" onPress={() => void openUpdate()}>
                 <Text class="text-sm text-primary-foreground">Download update</Text>
               </Button>
               <Button
@@ -82,10 +124,7 @@ function App() {
               >
                 <Text class="text-sm text-foreground">Dismiss</Text>
               </Button>
-              <Button
-                class="rounded-md border border-border px-2 py-1 hover:bg-accent"
-                onPress={() => void checkUpdates(true)}
-              >
+              <Button class="rounded-md border border-border px-2 py-1 hover:bg-accent" onPress={() => void checkUpdates(true)}>
                 <Text class="text-xs text-muted-foreground">Check again</Text>
               </Button>
             </View>

@@ -96,20 +96,25 @@ export async function detectBinary(): Promise<string> {
   const explicit = settings().serverPath.trim();
   if (explicit !== "") return explicit;
   const home = (await import("os")).homedir();
-  const candidates = [
-    `${home}/.local/bin/pcrc-server`,
-    "/usr/local/bin/pcrc-server",
-    "/usr/bin/pcrc-server",
+  // Standard install locations are on PATH and granted by executable name.
+  const onPath = [`${home}/.local/bin/pcrc-server`, "/usr/local/bin/pcrc-server", "/usr/bin/pcrc-server"];
+  for (const candidate of onPath) {
+    try {
+      if (await fsp.exists(candidate)) return "pcrc-server";
+    } catch {
+      // not readable/allowed; try the next one
+    }
+  }
+  // App-bundle resources are not on PATH and are granted as absolute paths.
+  const bundled = [
     "/Applications/PC Remote Control.app/Contents/Resources/pcrc-server",
     `${home}/Applications/PC Remote Control.app/Contents/Resources/pcrc-server`,
-    `${home}/source/Pc-remote-control-mcp/target/release/pcrc-server`,
-    `${home}/source/Pc-remote-control-mcp/target/debug/pcrc-server`,
   ];
-  for (const candidate of candidates) {
+  for (const candidate of bundled) {
     try {
       if (await fsp.exists(candidate)) return candidate;
     } catch {
-      // not readable/allowed; try the next one
+      // try the next one
     }
   }
   return "pcrc-server";

@@ -1,4 +1,6 @@
 import { Scroll, Text, View } from "nsh";
+import { Application } from "nsh/desktop";
+import { Button } from "nsh/base";
 import { Card, CodeBlock, CopyButton, Pill, Row } from "../components";
 import { cfg, mcpUrl, settings, status, tools } from "../store";
 
@@ -75,6 +77,22 @@ export default function AboutPage() {
             </Each>
           </Scroll>
         </If>
+      </Card>
+
+      <Card title="Desktop behavior">
+        <Text class="text-xs text-muted-foreground">
+          Closing the window keeps PC Remote Control running in the system tray (menu bar on macOS, notification area
+          on Windows, AppIndicator on Linux). Click the tray icon to restore the window; the tray menu also has Show
+          window, Hide window and Quit. Use the button below to quit completely.
+        </Text>
+        <View class="flex-row">
+          <Button
+            class="rounded-md border border-border px-3 py-1.5 hover:bg-accent"
+            onPress={() => Application.quit()}
+          >
+            <Text class="text-sm text-destructive">Quit PC Remote Control</Text>
+          </Button>
+        </View>
       </Card>
 
       <Card title="Permissions">

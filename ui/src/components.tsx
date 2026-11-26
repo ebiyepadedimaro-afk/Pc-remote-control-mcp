@@ -22,19 +22,17 @@ export function Card(props: { title?: string; subtitle?: string; className?: str
 
 export function Row(props: { label: string; value?: string; mono?: boolean; hint?: string; children?: any }) {
   return (
-    <View class="flex-row items-center gap-3">
-      <View class="w-44 shrink-0">
-        <Text class="text-sm text-foreground">{props.label}</Text>
-        <If when={props.hint}>{(hint) => <Text class="text-xs text-muted-foreground">{hint()}</Text>}</If>
-      </View>
-      <View class="flex-1 flex-row items-center gap-2">
-        <If when={props.value}>
-          {(value) => (
-            <Text class={`flex-1 text-sm text-muted-foreground ${props.mono ? "font-mono text-xs" : ""}`}>{value()}</Text>
-          )}
-        </If>
-        {props.children}
-      </View>
+    <View class="gap-1">
+      <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text>
+      <If when={props.value}>
+        {(value) => (
+          <Text class={`text-sm text-foreground ${props.mono ? "font-mono text-xs break-all" : ""}`}>{value()}</Text>
+        )}
+      </If>
+      <If when={props.hint}>{(hint) => <Text class="text-xs text-muted-foreground">{hint()}</Text>}</If>
+      <If when={props.children}>
+        {(child) => <View class="flex-row flex-wrap items-center gap-2">{child()}</View>}
+      </If>
     </View>
   );
 }

@@ -1,7 +1,7 @@
 {
   "name": "PC Remote Control",
   "id": "com.pcrc.control",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "build": 1,
   "capabilities": {
     "process": {
@@ -50,7 +50,10 @@
     },
     "homeDir": true,
     "clipboard": true,
-    "application": true
+    "application": true,
+    "windows": true,
+    "statusBar": true
   },
-  "icon": "assets/icon.png"
+  "icon": "assets/icon.png",
+  "singleInstance": true
 }

@@ -31,40 +31,44 @@ export default function ServerPage() {
   return (
     <View class="gap-3">
       <Card title="Server" subtitle="MCP server running on this PC">
-        <View class="flex-row flex-wrap items-center gap-3">
-          <View
-            class={`h-2.5 w-2.5 rounded-full ${status() ? "bg-[#22c55e]" : phase() === "starting" ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`}
-          />
-          <Text class="text-base font-medium text-foreground">{phaseLabel(phase())}</Text>
-          <If when={status()}>
-            {(s) => (
-              <Text class="text-xs text-muted-foreground">
-                v{s().version} · {s().platform}/{s().arch} · up {formatUptime(s().uptime_secs)}
-              </Text>
-            )}
-          </If>
-          <View class="flex-1" />
-          <Button
-            class="rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90 disabled:opacity-50"
-            disabled={busy() || status() !== null || phase() === "starting"}
-            onPress={() => void start()}
-          >
-            <Text class="text-sm text-primary-foreground">Start</Text>
-          </Button>
-          <Button
-            class="rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50"
-            disabled={busy() || status() === null}
-            onPress={() => void restart()}
-          >
-            <Text class="text-sm text-foreground">Restart</Text>
-          </Button>
-          <Button
-            class="rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50"
-            disabled={busy() || status() === null}
-            onPress={() => void stop()}
-          >
-            <Text class="text-sm text-destructive">Stop</Text>
-          </Button>
+        <View class="gap-2">
+          <View class="flex-row items-center gap-2">
+            <View
+              class={`h-2.5 w-2.5 rounded-full ${status() ? "bg-[#22c55e]" : phase() === "starting" ? "bg-[#f59e0b]" : "bg-[#ef4444]"}`}
+            />
+            <Text class="text-base font-medium text-foreground">{phaseLabel(phase())}</Text>
+            <View class="flex-1" />
+            <If when={status()}>
+              {(s) => (
+                <Text class="text-right text-[11px] text-muted-foreground">
+                  v{s().version} · {s().platform}/{s().arch} · up {formatUptime(s().uptime_secs)}
+                </Text>
+              )}
+            </If>
+          </View>
+          <View class="flex-row gap-2">
+            <Button
+              class="flex-1 items-center justify-center rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90 disabled:opacity-50"
+              disabled={busy() || status() !== null || phase() === "starting"}
+              onPress={() => void start()}
+            >
+              <Text class="text-sm text-primary-foreground">Start</Text>
+            </Button>
+            <Button
+              class="flex-1 items-center justify-center rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50"
+              disabled={busy() || status() === null}
+              onPress={() => void restart()}
+            >
+              <Text class="text-sm text-foreground">Restart</Text>
+            </Button>
+            <Button
+              class="flex-1 items-center justify-center rounded-md border border-border px-3 py-1.5 hover:bg-accent disabled:opacity-50"
+              disabled={busy() || status() === null}
+              onPress={() => void stop()}
+            >
+              <Text class="text-sm text-destructive">Stop</Text>
+            </Button>
+          </View>
         </View>
         <SwitchRow
           label="Start the server when this app opens"
@@ -97,9 +101,22 @@ export default function ServerPage() {
             </If>
 
             <Card title="Connection">
-              <Row label="MCP endpoint" value={s().mcp_url} mono>
-                <CopyButton text={s().mcp_url} />
-              </Row>
+              <View class="gap-1.5">
+                <View class="flex-row items-center gap-2">
+                  <Text class="text-xs font-medium text-muted-foreground">MCP endpoint</Text>
+                  <If when={tunnelRunning()}>
+                    <Pill text="public tunnel" tone="green" />
+                  </If>
+                </View>
+                <View class="flex-row items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+                  <Text class="flex-1 font-mono text-xs text-foreground break-all">{s().mcp_url}</Text>
+                  <CopyButton text={s().mcp_url} />
+                </View>
+                <View class="flex-row items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+                  <Text class="flex-1 font-mono text-[11px] text-muted-foreground break-all">{s().mcp_url_local}</Text>
+                  <CopyButton text={s().mcp_url_local} />
+                </View>
+              </View>
               <Row
                 label="Approval"
                 value={
