@@ -26,7 +26,7 @@ export function Row(props: { label: string; value?: string; mono?: boolean; hint
       <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text>
       <If when={props.value}>
         {(value) => (
-          <Text class={`text-sm text-foreground ${props.mono ? "font-mono text-xs break-all" : ""}`}>{value()}</Text>
+          <Text class={`text-sm text-foreground ${props.mono ? "font-mono text-xs" : ""}`}>{value()}</Text>
         )}
       </If>
       <If when={props.hint}>{(hint) => <Text class="text-xs text-muted-foreground">{hint()}</Text>}</If>

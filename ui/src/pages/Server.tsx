@@ -109,11 +109,11 @@ export default function ServerPage() {
                   </If>
                 </View>
                 <View class="flex-row items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
-                  <Text class="flex-1 font-mono text-xs text-foreground break-all">{s().mcp_url}</Text>
+                  <Text class="flex-1 font-mono text-xs text-foreground">{s().mcp_url}</Text>
                   <CopyButton text={s().mcp_url} />
                 </View>
                 <View class="flex-row items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
-                  <Text class="flex-1 font-mono text-[11px] text-muted-foreground break-all">{s().mcp_url_local}</Text>
+                  <Text class="flex-1 font-mono text-[11px] text-muted-foreground">{s().mcp_url_local}</Text>
                   <CopyButton text={s().mcp_url_local} />
                 </View>
               </View>
