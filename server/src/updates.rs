@@ -141,11 +141,55 @@ fn asset_name() -> Option<String> {
     Some(name.to_string())
 }
 
+fn release_json(tag: &str, notes: &str, source: &str) -> Value {
+    let current = env!("CARGO_PKG_VERSION");
+    let latest = tag.trim_start_matches(['v', 'V']).to_string();
+    let asset = asset_name();
+    let download_url = asset
+        .as_ref()
+        .map(|a| format!("https://github.com/{REPO}/releases/download/{tag}/{a}"));
+    json!({
+        "available": is_newer(&latest, current),
+        "current": current,
+        "latest": latest,
+        "tag": tag,
+        "url": format!("https://github.com/{REPO}/releases/tag/{tag}"),
+        "notes": notes,
+        "published_at": Value::Null,
+        "asset": asset,
+        "download_url": download_url,
+        "repo": REPO,
+        "source": source,
+        "checked_ms": now_ms(),
+    })
+}
+
+/// github.com's release Atom feed names the latest tag and is small.
+async fn fallback_atom(http: &reqwest::Client) -> Option<Value> {
+    let url = format!("https://github.com/{REPO}/releases.atom");
+    let resp = http.get(&url).timeout(Duration::from_secs(25)).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let text = resp.text().await.ok()?;
+    let entry = text.split("<entry>").nth(1)?;
+    let marker = "/releases/tag/";
+    let start = entry.find(marker)? + marker.len();
+    let tag: String = entry[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
+        .collect();
+    if tag.is_empty() {
+        return None;
+    }
+    Some(release_json(&tag, "", "github-atom"))
+}
+
 /// api.github.com is blocked on some networks; github.com still redirects
 /// `/releases/latest` to `/releases/tag/<tag>`, which is all we need.
 async fn fallback_redirect(http: &reqwest::Client) -> Option<Value> {
     let url = format!("https://github.com/{REPO}/releases/latest");
-    let resp = http.get(&url).timeout(Duration::from_secs(15)).send().await.ok()?;
+    let resp = http.get(&url).timeout(Duration::from_secs(30)).send().await.ok()?;
     let final_url = resp.url().as_str().to_string();
     let tag = final_url
         .split("/releases/tag/")
@@ -157,26 +201,7 @@ async fn fallback_redirect(http: &reqwest::Client) -> Option<Value> {
     if tag.is_empty() {
         return None;
     }
-    let current = env!("CARGO_PKG_VERSION");
-    let latest = tag.trim_start_matches(['v', 'V']).to_string();
-    let asset = asset_name();
-    let download_url = asset
-        .as_ref()
-        .map(|a| format!("https://github.com/{REPO}/releases/download/{tag}/{a}"));
-    Some(json!({
-        "available": is_newer(&latest, current),
-        "current": current,
-        "latest": latest,
-        "tag": tag,
-        "url": format!("https://github.com/{REPO}/releases/tag/{tag}"),
-        "notes": "",
-        "published_at": Value::Null,
-        "asset": asset,
-        "download_url": download_url,
-        "repo": REPO,
-        "source": "github-redirect",
-        "checked_ms": now_ms(),
-    }))
+    Some(release_json(&tag, "", "github-redirect"))
 }
 
 pub async fn check(http: &reqwest::Client) -> Value {
@@ -188,7 +213,9 @@ pub async fn check(http: &reqwest::Client) -> Value {
     }
     let mut value = fetch(http).await;
     if value.get("error").is_some() {
-        if let Some(fallback) = fallback_redirect(http).await {
+        if let Some(fallback) = fallback_atom(http).await {
+            value = fallback;
+        } else if let Some(fallback) = fallback_redirect(http).await {
             value = fallback;
         }
     }
