@@ -375,6 +375,12 @@ The window is titled **PC Remote Control** and **closing it hides it to the syst
 notification area on Windows, AppIndicator on Linux). Click the tray icon to restore it; the tray menu has Show
 window, Hide window and Quit. A second launch focuses the running instance (`singleInstance`).
 
+**App icon and the dev host:** running with `nsh run` uses the nsh *development* host, whose dock/taskbar icon is
+the nsh runtime gear — that is a dev-host limitation. The installed/packaged app shows the PC Remote Control icon.
+On Linux without a package, `./scripts/install-desktop.sh` builds the bundle into `~/.local/share/pc-remote-control`
+and adds an application-menu entry (no root); launch "PC Remote Control" from the app grid. The `.deb` does the
+same system-wide.
+
 **App icon:** `ui/assets/icon.png` (1024×1024, with 512/256 and `.ico` exports in the same folder). `ui/nsh.json`
 declares `"icon": "assets/icon.png"`, so `nsh package --target linux|macos|windows` embeds it: the Linux package
 contains `com.pcrc.control.png` and a `.desktop` file with `Icon=com.pcrc.control`; Windows embeds it in the `.exe`.
