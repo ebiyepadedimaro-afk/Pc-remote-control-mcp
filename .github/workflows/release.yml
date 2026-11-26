@@ -25,16 +25,6 @@ jobs:
             bin: pcrc-server.exe
             artifact: pcrc-server-windows-x86_64
             archive: zip
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            bin: pcrc-server
-            artifact: pcrc-server-macos-arm64
-            archive: tar.gz
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            bin: pcrc-server
-            artifact: pcrc-server-macos-x86_64
-            archive: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -74,3 +64,34 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+
+  build-macos:
+    name: build macOS (arm64 + x86_64)
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Build (arm64)
+        run: cargo build --release -p pcrc-server --target aarch64-apple-darwin
+      - name: Build (x86_64)
+        run: cargo build --release -p pcrc-server --target x86_64-apple-darwin
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            if [ "$target" = "aarch64-apple-darwin" ]; then name=pcrc-server-macos-arm64; else name=pcrc-server-macos-x86_64; fi
+            mkdir -p "dist-$name"
+            cp "target/$target/release/pcrc-server" "dist-$name/"
+            cp README.md LICENSE "dist-$name/"
+            (cd "dist-$name" && tar -czf "../$name.tar.gz" .)
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            pcrc-server-macos-arm64.tar.gz
+            pcrc-server-macos-x86_64.tar.gz

@@ -76,7 +76,7 @@ Prebuilt server binaries are published for each release
 |---|---|
 | Linux x86_64 | `pcrc-server-linux-x86_64.tar.gz` |
 | macOS Apple Silicon | `pcrc-server-macos-arm64.tar.gz` |
-| macOS Intel | `pcrc-server-macos_x86_64.tar.gz` |
+| macOS Intel | `pcrc-server-macos-x86_64.tar.gz` |
 | Windows x86_64 | `pcrc-server-windows-x86_64.zip` |
 
 Extract the archive, put `pcrc-server` (or `pcrc-server.exe`) on `PATH` (on Linux/macOS:

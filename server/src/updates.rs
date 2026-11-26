@@ -130,6 +130,55 @@ async fn fetch(http: &reqwest::Client) -> Value {
     })
 }
 
+fn asset_name() -> Option<String> {
+    let name = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => "pcrc-server-linux-x86_64.tar.gz",
+        ("macos", "aarch64") => "pcrc-server-macos-arm64.tar.gz",
+        ("macos", "x86_64") => "pcrc-server-macos-x86_64.tar.gz",
+        ("windows", "x86_64") => "pcrc-server-windows-x86_64.zip",
+        _ => return None,
+    };
+    Some(name.to_string())
+}
+
+/// api.github.com is blocked on some networks; github.com still redirects
+/// `/releases/latest` to `/releases/tag/<tag>`, which is all we need.
+async fn fallback_redirect(http: &reqwest::Client) -> Option<Value> {
+    let url = format!("https://github.com/{REPO}/releases/latest");
+    let resp = http.get(&url).timeout(Duration::from_secs(15)).send().await.ok()?;
+    let final_url = resp.url().as_str().to_string();
+    let tag = final_url
+        .split("/releases/tag/")
+        .nth(1)?
+        .split(['?', '#'])
+        .next()?
+        .trim_end_matches('/')
+        .to_string();
+    if tag.is_empty() {
+        return None;
+    }
+    let current = env!("CARGO_PKG_VERSION");
+    let latest = tag.trim_start_matches(['v', 'V']).to_string();
+    let asset = asset_name();
+    let download_url = asset
+        .as_ref()
+        .map(|a| format!("https://github.com/{REPO}/releases/download/{tag}/{a}"));
+    Some(json!({
+        "available": is_newer(&latest, current),
+        "current": current,
+        "latest": latest,
+        "tag": tag,
+        "url": format!("https://github.com/{REPO}/releases/tag/{tag}"),
+        "notes": "",
+        "published_at": Value::Null,
+        "asset": asset,
+        "download_url": download_url,
+        "repo": REPO,
+        "source": "github-redirect",
+        "checked_ms": now_ms(),
+    }))
+}
+
 pub async fn check(http: &reqwest::Client) -> Value {
     let now = now_ms();
     if let Some((ts, value)) = cache().lock().unwrap().as_ref() {
@@ -137,7 +186,12 @@ pub async fn check(http: &reqwest::Client) -> Value {
             return value.clone();
         }
     }
-    let value = fetch(http).await;
+    let mut value = fetch(http).await;
+    if value.get("error").is_some() {
+        if let Some(fallback) = fallback_redirect(http).await {
+            value = fallback;
+        }
+    }
     *cache().lock().unwrap() = Some((now, value.clone()));
     value
 }
