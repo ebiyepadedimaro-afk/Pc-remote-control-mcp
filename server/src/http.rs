@@ -213,6 +213,7 @@ async fn admin_status(
         "version": state.version,
         "platform": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
+        "hostname": sysinfo::System::host_name(),
         "uptime_secs": state.uptime_secs(),
         "now_ms": now,
         "transport": if state.stdio_mode { "stdio" } else { "http" },

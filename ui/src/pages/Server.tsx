@@ -117,6 +117,7 @@ export default function ServerPage() {
                   <CopyButton text={s().mcp_url_local} />
                 </View>
               </View>
+              <Row label="Machine" value={String(s().hostname ?? "unknown")} />
               <Row
                 label="Approval"
                 value={

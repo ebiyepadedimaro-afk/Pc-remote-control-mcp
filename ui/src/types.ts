@@ -99,6 +99,7 @@ export interface Status {
   version: string;
   platform: string;
   arch: string;
+  hostname?: string | null;
   uptime_secs: number;
   now_ms: number;
   transport: string;

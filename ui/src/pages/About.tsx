@@ -5,19 +5,25 @@ import { Card, CodeBlock, CopyButton, Pill, Row } from "../components";
 import { cfg, mcpUrl, settings, status, tools } from "../store";
 
 export default function AboutPage() {
+  const machine = () => {
+    const raw = String(status()?.hostname ?? "pc").toLowerCase();
+    const slug = raw.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    return slug === "" ? "pc" : slug;
+  };
+  const serverKey = () => `pc-remote-control-${machine()}`;
   const httpConfig = () => {
     const entry: any = { url: mcpUrl() };
     const token = status()?.token ?? cfg()?.token ?? "";
     if (status()?.token_enabled && token !== "") {
       entry.headers = { Authorization: `Bearer ${token}` };
     }
-    return JSON.stringify({ mcpServers: { "pc-remote-control": entry } }, null, 2);
+    return JSON.stringify({ mcpServers: { [serverKey()]: entry } }, null, 2);
   };
   const stdioConfig = () => {
     return JSON.stringify(
       {
         mcpServers: {
-          "pc-remote-control": {
+          [serverKey()]: {
             command: settings().serverPath || "pcrc-server",
             args: ["--stdio"],
           },
@@ -52,10 +58,12 @@ export default function AboutPage() {
       </Card>
 
       <Card title="Connect an MCP client" subtitle="HTTP transport (recommended)">
+        <Row label="Client entry name" value={serverKey()} mono />
         <CodeBlock label="Claude Desktop / Cursor / generic HTTP client (.mcp.json)" text={httpConfig()} />
         <Text class="text-xs text-muted-foreground">
-          Connections are approved automatically. With a bearer token enabled, add the Authorization header shown in
-          the snippet. For the web connectors of Claude, ChatGPT or Gemini, expose the server beyond loopback through
+          Each machine gets its own entry name, derived from its hostname, so several PCs can sit in one client
+          config without colliding. Connections are approved automatically. With a bearer token enabled, add the
+          Authorization header shown in the snippet. For the web connectors of Claude, ChatGPT or Gemini, expose the server beyond loopback through
           a tunnel and enable the token.
         </Text>
         <CodeBlock label="stdio transport (no HTTP, for desktop clients)" text={stdioConfig()} />

@@ -117,7 +117,7 @@ app; your config is untouched.
 ```json
 {
   "mcpServers": {
-    "pc-remote-control": {
+    "pc-remote-control-<machine-name>": {
       "type": "http",
       "url": "http://127.0.0.1:8080/mcp"
     }
@@ -125,10 +125,13 @@ app; your config is untouched.
 }
 ```
 
+The app generates the entry name from this PC's hostname (`pc-remote-control-<hostname>`), so clients can talk to
+several machines without key collisions.
+
 Claude Code:
 
 ```sh
-claude mcp add --transport http pc-remote-control http://127.0.0.1:8080/mcp
+claude mcp add --transport http "pc-remote-control-$(hostname | tr '[:upper:]' '[:lower:]')" http://127.0.0.1:8080/mcp
 ```
 
 **stdio** (desktop clients without HTTP support)
@@ -136,7 +139,7 @@ claude mcp add --transport http pc-remote-control http://127.0.0.1:8080/mcp
 ```json
 {
   "mcpServers": {
-    "pc-remote-control": {
+    "pc-remote-control-<machine-name>": {
       "command": "pcrc-server",
       "args": ["--stdio"]
     }
@@ -172,7 +175,7 @@ offers a one-click "Enable bearer token" step first. Point clients at the tunnel
 ```json
 {
   "mcpServers": {
-    "pc-remote-control": {
+    "pc-remote-control-<machine-name>": {
       "type": "http",
       "url": "https://example.trycloudflare.com/mcp",
       "headers": { "Authorization": "Bearer <token>" }
