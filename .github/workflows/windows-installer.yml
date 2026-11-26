@@ -1,0 +1,77 @@
+name: windows-installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build the installer for"
+        required: true
+        default: "v0.1.5"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    name: Windows .exe installer (${{ inputs.tag }})
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Install nsh
+        shell: pwsh
+        run: |
+          irm https://nsh.dev/install.ps1 | iex
+          "$env:LOCALAPPDATA\nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$env:LOCALAPPDATA\nsh\bin\nsh.exe" --version
+      - name: Download server
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force dl | Out-Null
+          gh release download "${{ inputs.tag }}" -p "pcrc-server-windows-x86_64.zip" -D dl
+          Expand-Archive dl/pcrc-server-windows-x86_64.zip -DestinationPath dl/server -Force
+          & dl/server/pcrc-server.exe --version
+      - name: Package desktop app
+        shell: pwsh
+        run: |
+          $env:Path = "$env:LOCALAPPDATA\nsh\bin;$env:Path"
+          nsh --version
+          nsh package ./ui --target windows --out pkg/win
+          $dir = (Get-ChildItem pkg/win -Directory | Select-Object -First 1).FullName
+          Write-Host "app dir: $dir"
+          Get-ChildItem $dir | Select-Object Name
+          $runner = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -ne "pcrc-server.exe" } | Select-Object -First 1
+          if ($runner -and $runner.Name -ne "PCRemoteControl.exe") {
+            Rename-Item $runner.FullName "PCRemoteControl.exe"
+          }
+          Copy-Item dl/server/pcrc-server.exe "$dir/pcrc-server.exe"
+          Copy-Item README.md, LICENSE "$dir/"
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          $dir = (Get-ChildItem pkg/win -Directory | Select-Object -First 1).FullName
+          Compress-Archive -Path "$dir/*" -DestinationPath "PC-Remote-Control-${{ inputs.tag }}-windows-portable.zip" -Force
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.tag }}".TrimStart('v')
+          $dir = (Get-ChildItem pkg/win -Directory | Select-Object -First 1).FullName
+          New-Item -ItemType Directory -Force out | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$version" `
+            "/DSourceDir=$dir" `
+            "/DIconFile=$PWD\ui\assets\icon.ico" `
+            "/DOutDir=$PWD\out" `
+            packaging/windows/pcrc.iss
+          Get-ChildItem out | Select-Object Name, Length
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            out/*.exe
+            *-windows-portable.zip
