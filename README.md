@@ -1,6 +1,6 @@
 # PC Remote Control MCP
 
-![PC Remote Control desktop app](docs/ui.png)
+<img src="docs/icon.png" width="96" alt="PC Remote Control icon"> ![PC Remote Control desktop app](docs/ui.png)
 
 A **remote-control MCP server that runs on your own computer** — Linux, macOS or Windows — with a native
 desktop app built with [nsh (Native Shell)](https://nsh.dev).
@@ -355,6 +355,11 @@ Four pages:
 
 `cd ui && nsh check && nsh test && nsh build` validates the app. `nsh package` produces installable packages per nsh's
 signing/packaging flow.
+
+**App icon:** `ui/assets/icon.png` (1024×1024, with 512/256 and `.ico` exports in the same folder). `ui/nsh.json`
+declares `"icon": "assets/icon.png"`, so `nsh package --target linux|macos|windows` embeds it: the Linux package
+contains `com.pcrc.control.png` and a `.desktop` file with `Icon=com.pcrc.control`; Windows embeds it in the `.exe`.
+The dev host (`nsh run`) shows the nsh runtime icon; the app icon appears in the packaged app.
 
 ## Repository layout
 

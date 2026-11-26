@@ -47,5 +47,6 @@
     "homeDir": true,
     "clipboard": true,
     "application": true
-  }
+  },
+  "icon": "assets/icon.png"
 }
