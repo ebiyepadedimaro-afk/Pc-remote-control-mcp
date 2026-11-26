@@ -1,0 +1,51 @@
+{
+  "name": "PC Remote Control",
+  "id": "com.pcrc.control",
+  "version": "0.1.0",
+  "build": 1,
+  "capabilities": {
+    "process": {
+      "execute": [
+        "pcrc-server"
+      ],
+      "env": [
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "LC_ALL",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "XDG_SESSION_TYPE",
+        "XDG_SESSION_ID",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "XAUTHORITY"
+      ],
+      "exit": true
+    },
+    "fs": {
+      "read": [
+        "${dataDir}",
+        "${homeDir}",
+        "/usr/local/bin",
+        "/usr/bin"
+      ],
+      "write": [
+        "${dataDir}"
+      ]
+    },
+    "network": {
+      "hosts": [
+        "127.0.0.1",
+        "localhost"
+      ]
+    },
+    "homeDir": true,
+    "clipboard": true,
+    "application": true
+  }
+}

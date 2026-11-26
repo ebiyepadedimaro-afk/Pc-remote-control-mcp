@@ -1,0 +1,5 @@
+/target
+/vendor/
+*.log
+.DS_Store
+__pycache__/
