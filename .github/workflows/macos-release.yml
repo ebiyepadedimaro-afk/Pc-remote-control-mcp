@@ -1,0 +1,49 @@
+name: macos-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach macOS assets to"
+        required: true
+        default: "v0.1.2"
+      runner:
+        description: "macOS runner label"
+        required: true
+        default: "macos-15-intel"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS assets (${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Build arm64
+        run: cargo build --release -p pcrc-server --target aarch64-apple-darwin
+      - name: Build x86_64
+        run: cargo build --release -p pcrc-server --target x86_64-apple-darwin
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            if [ "$target" = "aarch64-apple-darwin" ]; then name=pcrc-server-macos-arm64; else name=pcrc-server-macos-x86_64; fi
+            mkdir -p "dist-$name"
+            cp "target/$target/release/pcrc-server" "dist-$name/"
+            cp README.md LICENSE "dist-$name/"
+            (cd "dist-$name" && tar -czf "../$name.tar.gz" .)
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: |
+            pcrc-server-macos-arm64.tar.gz
+            pcrc-server-macos-x86_64.tar.gz
