@@ -300,6 +300,14 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
                 .stderr(Stdio::piped());
             #[cfg(unix)]
             cmd.process_group(0);
+            #[cfg(target_os = "linux")]
+            unsafe {
+                // Take the tunnel client down with the server, even on SIGKILL.
+                cmd.pre_exec(|| {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+                    Ok(())
+                });
+            }
             let mut child = cmd
                 .spawn()
                 .map_err(|e| format!("cannot start {}: {e}", program.display()))?;

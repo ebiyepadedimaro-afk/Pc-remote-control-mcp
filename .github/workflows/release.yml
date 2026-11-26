@@ -95,3 +95,134 @@ jobs:
           files: |
             pcrc-server-macos-arm64.tar.gz
             pcrc-server-macos-x86_64.tar.gz
+
+  linux-deb:
+    name: Linux .deb package
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nsh
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.nsh/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Download server
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dl/server
+          gh release download "${{ github.ref_name }}" -p 'pcrc-server-linux-x86_64.tar.gz' -D dl
+          tar -xzf dl/pcrc-server-linux-x86_64.tar.gz -C dl/server
+          dl/server/pcrc-server --version
+      - name: Package desktop app
+        run: |
+          nsh --version
+          nsh package ./ui --target linux --out pkg/linux
+      - name: Build .deb
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app=$(find pkg/linux -maxdepth 1 -type d -name "PC Remote Control" | head -1)
+          bash scripts/build-deb.sh "$version" "$app" dl/server/pcrc-server "out/pc-remote-control_${version}_amd64.deb"
+          dpkg-deb -I "out/pc-remote-control_${version}_amd64.deb"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.deb
+
+  windows-installer:
+    name: Windows .exe installer
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nsh
+        shell: pwsh
+        run: |
+          irm https://nsh.dev/install.ps1 | iex
+          "$env:USERPROFILE\.nsh\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Download server
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force dl | Out-Null
+          gh release download "${{ github.ref_name }}" -p "pcrc-server-windows-x86_64.zip" -D dl
+          Expand-Archive dl/pcrc-server-windows-x86_64.zip -DestinationPath dl/server -Force
+          & dl/server/pcrc-server.exe --version
+      - name: Package desktop app
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.nsh\bin;$env:USERPROFILE\.local\bin;$env:Path"
+          nsh --version
+          nsh package ./ui --target windows --out pkg/win
+          $dir = (Get-ChildItem pkg\win -Directory | Select-Object -First 1).FullName
+          Write-Host "app dir: $dir"
+          Get-ChildItem $dir | Select-Object Name
+          $runner = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -ne "pcrc-server.exe" } | Select-Object -First 1
+          if ($runner -and $runner.Name -ne "PCRemoteControl.exe") {
+            Rename-Item $runner.FullName "PCRemoteControl.exe"
+          }
+          Copy-Item dl\server\pcrc-server.exe "$dir\pcrc-server.exe"
+          Copy-Item README.md, LICENSE "$dir\"
+      - name: Portable zip
+        shell: pwsh
+        run: |
+          $dir = (Get-ChildItem pkg\win -Directory | Select-Object -First 1).FullName
+          Compress-Archive -Path "$dir\*" -DestinationPath "PC-Remote-Control-${{ github.ref_name }}-windows-portable.zip" -Force
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $dir = (Get-ChildItem pkg\win -Directory | Select-Object -First 1).FullName
+          New-Item -ItemType Directory -Force out | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DMyAppVersion=$version" `
+            "/DSourceDir=$dir" `
+            "/DIconFile=$PWD\ui\assets\icon.ico" `
+            "/DOutDir=$PWD\out" `
+            paperwork\windows\pcrc.iss
+          Get-ChildItem out | Select-Object Name, Length
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            out/*.exe
+            *-windows-portable.zip
+
+  macos-app:
+    name: macOS .dmg
+    needs: release
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nsh
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.nsh/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build server
+        run: cargo build --release -p pcrc-server
+      - name: Package desktop app
+        run: |
+          nsh --version
+          nsh package ./ui --target macos --out pkg/macos
+      - name: Assemble .app and .dmg
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          app=$(find pkg/macos -maxdepth 2 -name "*.app" | head -1)
+          echo "app: $app"
+          mkdir -p "$app/Contents/Resources"
+          cp target/release/pcrc-server "$app/Contents/Resources/pcrc-server"
+          chmod +x "$app/Contents/Resources/pcrc-server"
+          mkdir -p out
+          hdiutil create -volname "PC Remote Control" -srcfolder "$app" -ov -format UDZO "out/PC-Remote-Control-${version}-macos-x86_64.dmg"
+          ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: out/*.dmg

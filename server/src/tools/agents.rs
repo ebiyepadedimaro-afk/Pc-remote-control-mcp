@@ -279,6 +279,13 @@ async fn spawn_job(
         .stderr(Stdio::piped());
     #[cfg(unix)]
     cmd.process_group(0);
+    #[cfg(target_os = "linux")]
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+            Ok(())
+        });
+    }
 
     let mut child = cmd.spawn().map_err(|e| {
         format!(

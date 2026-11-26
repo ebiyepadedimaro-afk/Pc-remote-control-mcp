@@ -94,7 +94,25 @@ export async function saveSettings(patch: Partial<UiSettings>): Promise<void> {
 
 export async function detectBinary(): Promise<string> {
   const explicit = settings().serverPath.trim();
-  return explicit !== "" ? explicit : "pcrc-server";
+  if (explicit !== "") return explicit;
+  const home = (await import("os")).homedir();
+  const candidates = [
+    `${home}/.local/bin/pcrc-server`,
+    "/usr/local/bin/pcrc-server",
+    "/usr/bin/pcrc-server",
+    "/Applications/PC Remote Control.app/Contents/Resources/pcrc-server",
+    `${home}/Applications/PC Remote Control.app/Contents/Resources/pcrc-server`,
+    `${home}/source/Pc-remote-control-mcp/target/release/pcrc-server`,
+    `${home}/source/Pc-remote-control-mcp/target/debug/pcrc-server`,
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (await fsp.exists(candidate)) return candidate;
+    } catch {
+      // not readable/allowed; try the next one
+    }
+  }
+  return "pcrc-server";
 }
 
 export async function refresh(): Promise<boolean> {

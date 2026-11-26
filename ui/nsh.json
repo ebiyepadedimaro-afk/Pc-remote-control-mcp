@@ -1,12 +1,15 @@
 {
   "name": "PC Remote Control",
   "id": "com.pcrc.control",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "build": 1,
   "capabilities": {
     "process": {
       "execute": [
-        "pcrc-server"
+        "pcrc-server",
+        "/usr/local/bin/pcrc-server",
+        "/usr/bin/pcrc-server",
+        "/Applications/PC Remote Control.app/Contents/Resources/pcrc-server"
       ],
       "env": [
         "PATH",
@@ -32,7 +35,8 @@
         "${dataDir}",
         "${homeDir}",
         "/usr/local/bin",
-        "/usr/bin"
+        "/usr/bin",
+        "/Applications"
       ],
       "write": [
         "${dataDir}"
