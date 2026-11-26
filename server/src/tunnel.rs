@@ -114,6 +114,20 @@ fn push_log(line: &str) {
     }
 }
 
+fn is_cloudflared_url(url: &str) -> bool {
+    let host = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split(':')
+        .next()
+        .unwrap_or("");
+    let Some(label) = host.strip_suffix(".trycloudflare.com") else { return false };
+    !label.is_empty() && !label.contains('.') && label != "api" && label != "www"
+}
+
 fn is_ngrok_url(url: &str) -> bool {
     let host = url
         .trim_start_matches("https://")
@@ -142,6 +156,13 @@ fn extract_https(line: &str, needle: &str) -> Option<String> {
         rest = &s[3..];
     }
     None
+}
+
+fn set_url(url: String) {
+    let mut g = info().lock().unwrap();
+    if g.url.is_none() {
+        g.url = Some(url);
+    }
 }
 
 fn set_running(url: Option<String>) {
@@ -181,12 +202,35 @@ fn ts_cli_args(socket: &str, args: Vec<String>) -> Vec<String> {
     out
 }
 
+async fn run_ts(
+    bin: &PathBuf,
+    socket: &str,
+    label: &str,
+    args: Vec<String>,
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
+    let mut cmd = tokio::process::Command::new(bin);
+    cmd.args(ts_cli_args(socket, args))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    match tokio::time::timeout(timeout, cmd.output()).await {
+        Ok(Ok(out)) => Ok(out),
+        Ok(Err(e)) => Err(format!("cannot run `tailscale {label}`: {e}")),
+        Err(_) => Err(format!("`tailscale {label}` timed out after {}s", timeout.as_secs())),
+    }
+}
+
 async fn tailscale_dns(bin: &PathBuf, socket: &str) -> Result<String, String> {
-    let out = tokio::process::Command::new(bin)
-        .args(ts_cli_args(socket, vec!["status".into(), "--json".into()]))
-        .output()
-        .await
-        .map_err(|e| format!("cannot run tailscale: {e}"))?;
+    let out = run_ts(
+        bin,
+        socket,
+        "status",
+        vec!["status".into(), "--json".into()],
+        Duration::from_secs(15),
+    )
+    .await?;
     if !out.status.success() {
         return Err(format!(
             "`tailscale status` failed: {}",
@@ -219,37 +263,38 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
             let bin = crate::tools::which("tailscale").ok_or_else(|| install_hint("tailscale"))?;
             let dns = tailscale_dns(&bin, tailscale_socket).await?;
             let target = format!("http://127.0.0.1:{port}");
-            let https = tokio::process::Command::new(&bin)
-                .args(ts_cli_args(tailscale_socket, vec![
-                    "serve".into(),
-                    "--bg".into(),
-                    "--https=443".into(),
-                    target.clone(),
-                ]))
-                .output()
-                .await
-                .map_err(|e| format!("cannot run `tailscale serve`: {e}"))?;
-            let (scheme, out) = if https.status.success() {
-                ("https", https)
-            } else {
-                let http = tokio::process::Command::new(&bin)
-                    .args(ts_cli_args(tailscale_socket, vec![
-                        "serve".into(),
-                        "--bg".into(),
-                        "--http=80".into(),
-                        target,
-                    ]))
-                    .output()
+            let https = run_ts(
+                &bin,
+                tailscale_socket,
+                "serve --https",
+                vec!["serve".into(), "--bg".into(), "--https=443".into(), target.clone()],
+                Duration::from_secs(25),
+            )
+            .await;
+            let (scheme, out) = match https {
+                Ok(out) if out.status.success() => ("https", out),
+                other => {
+                    let https_err = match other {
+                        Ok(out) => String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                        Err(e) => e,
+                    };
+                    let http = run_ts(
+                        &bin,
+                        tailscale_socket,
+                        "serve --http",
+                        vec!["serve".into(), "--bg".into(), "--http=80".into(), target],
+                        Duration::from_secs(15),
+                    )
                     .await
-                    .map_err(|e| format!("cannot run `tailscale serve`: {e}"))?;
-                if !http.status.success() {
-                    return Err(format!(
-                        "`tailscale serve` failed. HTTPS: {}. HTTP: {}. Enable HTTPS certificates for the tailnet, or allow port 80.",
-                        String::from_utf8_lossy(&https.stderr).trim(),
-                        String::from_utf8_lossy(&http.stderr).trim()
-                    ));
+                    .map_err(|e| format!("HTTPS Serve failed ({https_err}); HTTP Serve failed: {e}"))?;
+                    if !http.status.success() {
+                        return Err(format!(
+                            "`tailscale serve` failed. HTTPS: {https_err}. HTTP: {}. Enable HTTPS certificates in the tailnet (admin console → DNS) to use 443, or allow port 80.",
+                            String::from_utf8_lossy(&http.stderr).trim()
+                        ));
+                    }
+                    ("http", http)
                 }
-                ("http", http)
             };
             {
                 let mut g = info().lock().unwrap();
@@ -339,10 +384,17 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
                                 .or_else(|| extract_https(&line, ".ngrok.io"))
                                 .filter(|u| is_ngrok_url(u))
                         } else {
-                            extract_https(&line, "trycloudflare.com")
+                            extract_https(&line, "trycloudflare.com").filter(|u| is_cloudflared_url(u))
                         };
                         if let Some(url) = found {
-                            set_running(Some(url));
+                            if kind_for_logs == "cloudflared" {
+                                set_url(url);
+                            } else {
+                                set_running(Some(url));
+                            }
+                        }
+                        if kind_for_logs == "cloudflared" && line.contains("Registered tunnel connection") {
+                            set_running(None);
                         }
                     }
                 });
@@ -359,10 +411,17 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
                                 .or_else(|| extract_https(&line, ".ngrok.io"))
                                 .filter(|u| is_ngrok_url(u))
                         } else {
-                            extract_https(&line, "trycloudflare.com")
+                            extract_https(&line, "trycloudflare.com").filter(|u| is_cloudflared_url(u))
                         };
                         if let Some(url) = found {
-                            set_running(Some(url));
+                            if kind_for_logs == "cloudflared" {
+                                set_url(url);
+                            } else {
+                                set_running(Some(url));
+                            }
+                        }
+                        if kind_for_logs == "cloudflared" && line.contains("Registered tunnel connection") {
+                            set_running(None);
                         }
                     }
                 });
@@ -391,7 +450,7 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
             // Give the client a moment to publish its URL. For ngrok, the local
             // agent API (127.0.0.1:4040) is authoritative.
             let client = reqwest::Client::new();
-            for _ in 0..65 {
+            for _ in 0..150 {
                 let state = info().lock().unwrap().state.clone();
                 if state != "starting" {
                     break;
@@ -446,12 +505,14 @@ pub async fn stop(tailscale_socket: &str) -> Result<Value, String> {
     }
     if kind == "tailscale" {
         if let Some(bin) = crate::tools::which("tailscale") {
-            let _ = tokio::process::Command::new(bin)
-                .args(ts_cli_args(tailscale_socket, vec!["serve".into(), "reset".into()]))
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .await;
+            let _ = run_ts(
+                &bin,
+                tailscale_socket,
+                "serve reset",
+                vec!["serve".into(), "reset".into()],
+                Duration::from_secs(10),
+            )
+            .await;
         }
         {
             let mut g = info().lock().unwrap();
