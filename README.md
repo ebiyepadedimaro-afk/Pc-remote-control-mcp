@@ -189,6 +189,27 @@ private tailnet URL; ngrok needs an authtoken). For ngrok, either run
 `ngrok config add-authtoken <token>` once, or paste the authtoken into the app's **Remote access** card — it is
 stored in the server config (file mode `0600`) and passed to the ngrok agent at launch.
 
+### Tunnel test notes (Linux, verified)
+
+- **cloudflared** quick tunnels print the URL before the edge connection registers. The server now waits for
+  `Registered tunnel connection` before reporting the tunnel ready, so early requests don't hit a transient 530.
+- **Tailscale Serve** was verified with a userspace daemon (no root):
+
+  ```sh
+  tailscaled --tun=userspace-networking \
+    --socket ~/.local/share/pcrc-tailscale/tailscaled.sock \
+    --state ~/.local/share/pcrc-tailscale/tailscaled.state \
+    --port=0 --socks5-server=127.0.0.1:1055
+  tailscale --socket ~/.local/share/pcrc-tailscale/tailscaled.sock up --hostname pc-remote-control
+  ```
+
+  Set `tunnel.tailscale_socket` to that socket. Serve prefers HTTPS on 443; when the tailnet has no HTTPS
+  certificates enabled it falls back to HTTP on port 80 (`http://<machine>.<tailnet>.ts.net`), and both remain
+  tailnet-only and bearer-token protected. `scripts/install-tailscaled-user.sh` installs the daemon as a systemd
+  user service.
+- Both tunnels were verified end to end: no token -> 401, token -> 200 (`pc-remote-control-mcp`), `tools/list` -> 54,
+  and `/admin/status.mcp_url` reflects the active tunnel URL.
+
 Set `tunnel.kind` (`ngrok`, `cloudflared`, `tailscale` or `auto`) and `tunnel.auto_start: true` to have the server
 launch the tunnel automatically at startup. While a tunnel is running:
 
