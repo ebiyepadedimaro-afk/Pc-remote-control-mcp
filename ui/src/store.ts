@@ -173,6 +173,30 @@ export async function checkUpdates(force = false): Promise<void> {
   }
 }
 
+export async function applyUpdate(): Promise<void> {
+  busy.set(true);
+  try {
+    notify("info", "Downloading the update...", 20000);
+    const res = await api<any>("/admin/update/apply", { method: "POST" });
+    if (res && res.staged) {
+      notify("info", "Update downloaded; restarting the server...", 20000);
+      await stop();
+      await sleep(800);
+      await start();
+      await checkUpdates(true);
+      const u = updateInfo();
+      notify("success", u && u.latest ? `Updated to v${u.latest}.` : "Update complete.", 9000);
+    } else {
+      notify("error", "The update could not be applied.", 9000);
+    }
+  } catch (e) {
+    notify("error", `Update failed: ${errText(e)}`, 14000);
+    addLog("ERROR", `update apply failed: ${errText(e)}`);
+  } finally {
+    busy.set(false);
+  }
+}
+
 export async function openUpdate(): Promise<void> {
   try {
     await api("/admin/update/open", { method: "POST" });

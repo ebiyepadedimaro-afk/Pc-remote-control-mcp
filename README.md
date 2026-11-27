@@ -106,9 +106,14 @@ Tailscale can run from the bundled binaries in userspace mode without root and b
 ## Updates
 
 The server checks the latest GitHub release (`/admin/update`, cached for 10 minutes). The desktop app polls it every
-30 minutes and shows an **Update available** banner with **Download update**, which opens the matching release asset
-for this platform (or the release page). Update the binary by replacing it with the downloaded one and restarting the
-app; your config is untouched.
+30 minutes and shows an **Update available** banner with **Update & restart**: the app downloads the matching release
+asset, stages the new server binary, stops the server (the swap completes at shutdown) and starts it again — the new
+version runs immediately, no browser or manual steps. Your config is untouched.
+
+Notes:
+- The swap needs the server binary's directory to be writable: user installs (`~/.local/bin`, the Windows installer,
+  the app bundle) are covered. System-wide package installs (the `.deb`) should update via the package manager.
+- A staged update survives interrupted restarts: it is applied on the next server start instead.
 
 ## Connect an MCP client
 

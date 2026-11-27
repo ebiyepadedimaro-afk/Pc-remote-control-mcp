@@ -152,6 +152,10 @@ async fn main() {
         return;
     }
 
+    // Finish an update swap that could not complete at shutdown, before
+    // anything else touches the binary path.
+    updates::startup_sweep();
+
     let config_path = args.config.clone().unwrap_or_else(config::default_config_path);
     let handle = match config::ConfigHandle::load(config_path.clone()) {
         Ok(h) => h,
@@ -261,7 +265,9 @@ async fn main() {
     if let Err(e) = serve.await {
         logging::error(format!("server error: {e}"));
         let _ = tunnel::stop(&cfg.tunnel.tailscale_socket).await;
+        updates::shutdown_swap();
         std::process::exit(1);
     }
     let _ = tunnel::stop(&cfg.tunnel.tailscale_socket).await;
+    updates::shutdown_swap();
 }

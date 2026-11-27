@@ -1,6 +1,6 @@
 [package]
 name = "pcrc-server"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 description = "PC Remote Control MCP server: control Linux, macOS and Windows desktops from any MCP client"
 license = "MIT"

@@ -1,9 +1,13 @@
 //! Update checking against GitHub Releases. The desktop app asks the local
 //! server (loopback admin API), which queries GitHub with a 10-minute cache.
 
+use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::io::AsyncWriteExt;
 
 pub const REPO: &str = "ebiyepadedimaro-afk/Pc-remote-control-mcp";
 
@@ -221,4 +225,208 @@ pub async fn check(http: &reqwest::Client) -> Value {
     }
     *cache().lock().unwrap() = Some((now, value.clone()));
     value
+}
+
+
+// ---------------------------------------------------------------- self-update
+
+#[derive(Deserialize, Serialize)]
+struct PendingUpdate {
+    target: String,
+    staged: String,
+    latest: String,
+}
+
+fn exe_paths() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.to_path_buf();
+    let staged = if cfg!(windows) { dir.join("pcrc-server.new.exe") } else { dir.join("pcrc-server.new") };
+    let pending = dir.join("pcrc-server.update.json");
+    Some((exe, pending, staged))
+}
+
+/// Swaps a staged binary into place. Renaming a running executable is allowed
+/// on Linux, macOS and Windows, so this works even while this process runs.
+fn swap_staged() -> bool {
+    let Some((exe, pending_path, staged)) = exe_paths() else { return false };
+    if !staged.exists() || !pending_path.exists() {
+        return false;
+    }
+    let pending: PendingUpdate = match std::fs::read_to_string(&pending_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+    {
+        Some(p) => p,
+        None => return false,
+    };
+    let old = PathBuf::from(format!("{}.old", exe.display()));
+    if let Err(e) = std::fs::rename(&exe, &old) {
+        crate::logging::warn(format!("update swap: cannot move the current binary: {e}"));
+        return false;
+    }
+    if let Err(e) = std::fs::rename(&staged, &exe) {
+        crate::logging::warn(format!("update swap: cannot move the new binary: {e}"));
+        let _ = std::fs::rename(&old, &exe);
+        return false;
+    }
+    let _ = std::fs::remove_file(&pending_path);
+    let _ = std::fs::remove_file(&old);
+    crate::logging::info(format!(
+        "update applied: v{} binary swapped in; it runs on the next start",
+        pending.latest
+    ));
+    true
+}
+
+/// Called at startup: finish a swap that could not complete at shutdown.
+pub fn startup_sweep() {
+    let Some((_, pending_path, staged)) = exe_paths() else { return };
+    if staged.exists() && !pending_path.exists() {
+        let _ = std::fs::remove_file(&staged);
+        return;
+    }
+    if swap_staged() {
+        return;
+    }
+    if let Ok(txt) = std::fs::read_to_string(&pending_path) {
+        if let Ok(p) = serde_json::from_str::<PendingUpdate>(&txt) {
+            crate::logging::info(format!(
+                "a staged update to v{} is pending; it will be applied on restart",
+                p.latest
+            ));
+        }
+    }
+}
+
+/// Called at shutdown (after the tunnel stops): complete a staged swap.
+pub fn shutdown_swap() -> bool {
+    swap_staged()
+}
+
+async fn download_to(http: &reqwest::Client, url: &str, dest: &Path, cap: u64) -> Result<u64, String> {
+    let resp = http
+        .get(url)
+        .timeout(Duration::from_secs(300))
+        .send()
+        .await
+        .map_err(|e| format!("download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("download failed: {e}"))?;
+    if let Some(total) = resp.content_length() {
+        if total > cap {
+            return Err(format!("asset is {total} bytes, above the {cap}-byte limit"));
+        }
+    }
+    let mut file = tokio::fs::File::create(dest)
+        .await
+        .map_err(|e| format!("cannot create {}: {e}", dest.display()))?;
+    let mut stream = resp.bytes_stream();
+    let mut written: u64 = 0;
+    while let Some(chunk) = futures_util::StreamExt::next(&mut stream).await {
+        let chunk = chunk.map_err(|e| format!("download failed: {e}"))?;
+        written += chunk.len() as u64;
+        if written > cap {
+            let _ = tokio::fs::remove_file(dest).await;
+            return Err(format!("download exceeded the {cap}-byte limit"));
+        }
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("cannot write {}: {e}", dest.display()))?;
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    Ok(written)
+}
+
+async fn extract_asset(asset: &Path, dir: &Path) -> Result<(), String> {
+    let mut cmd = tokio::process::Command::new("tar");
+    cmd.arg("-xf").arg(asset).arg("-C").arg(dir);
+    let fut = async {
+        let out = cmd.output().await.map_err(|e| format!("cannot run tar: {e}"))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "extraction failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(120), fut)
+        .await
+        .map_err(|_| "extraction timed out".to_string())?
+}
+
+/// Downloads the matching release asset, extracts the server binary and
+/// stages it next to the current one. The swap happens at shutdown; the
+/// desktop app then restarts the server, which now runs the new version.
+pub async fn apply(http: &reqwest::Client) -> Result<Value, String> {
+    let info = fetch(http).await;
+    if !info.get("available").and_then(|v| v.as_bool()).unwrap_or(false) {
+        return Err("no update is available".into());
+    }
+    let latest = info.get("latest").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let Some(download_url) = info.get("download_url").and_then(|u| u.as_str()).map(str::to_string) else {
+        return Err("the release has no binary for this platform".into());
+    };
+
+    let stamp = now_ms();
+    let work = std::env::temp_dir().join(format!("pcrc-update-{stamp}"));
+    std::fs::create_dir_all(&work).map_err(|e| format!("cannot create {work:?}: {e}"))?;
+    let asset_name = download_url.rsplit('/').next().unwrap_or("asset").to_string();
+    let asset_path = work.join(&asset_name);
+
+    let bytes = download_to(http, &download_url, &asset_path, 256 * 1024 * 1024).await?;
+    crate::logging::info(format!("update v{latest}: downloaded {asset_name} ({bytes} bytes)"));
+    extract_asset(&asset_path, &work).await?;
+
+    let binary = if cfg!(windows) { work.join("pcrc-server.exe") } else { work.join("pcrc-server") };
+    if !binary.exists() {
+        let _ = std::fs::remove_dir_all(&work);
+        return Err("the archive did not contain the server binary".into());
+    }
+    // Sanity check: the staged binary must run.
+    let probe = tokio::process::Command::new(&binary)
+        .arg("--version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), probe).await {
+        let v = String::from_utf8_lossy(&out.stdout);
+        crate::logging::info(format!("staged binary check: {}", v.trim()));
+    }
+
+    let Some((exe, pending_path, staged_default)) = exe_paths() else {
+        let _ = std::fs::remove_dir_all(&work);
+        return Err("cannot determine the server binary path".into());
+    };
+    let staged = match std::fs::copy(&binary, &staged_default) {
+        Ok(_) => staged_default,
+        Err(_) => binary.clone(),
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755));
+    }
+    let pending = PendingUpdate {
+        target: exe.to_string_lossy().to_string(),
+        staged: staged.to_string_lossy().to_string(),
+        latest: latest.clone(),
+    };
+    std::fs::write(
+        &pending_path,
+        serde_json::to_string(&pending).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("cannot write the update marker: {e}"))?;
+    if staged != binary {
+        let _ = std::fs::remove_dir_all(&work);
+    }
+    crate::logging::info(format!("update v{latest} staged at {}", staged.display()));
+    Ok(json!({
+        "ok": true,
+        "staged": staged.to_string_lossy(),
+        "latest": latest,
+        "note": "the swap completes when the server stops; restart it to run the new version",
+    }))
 }

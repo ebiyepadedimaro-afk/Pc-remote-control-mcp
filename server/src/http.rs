@@ -33,6 +33,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/admin/tunnel", get(admin_tunnel_status).post(admin_tunnel_action))
         .route("/admin/update", get(admin_update))
         .route("/admin/update/open", post(admin_update_open))
+        .route("/admin/update/apply", post(admin_update_apply))
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .with_state(state)
 }
@@ -478,5 +479,28 @@ async fn admin_update_open(
             Err(e) => json_response(StatusCode::INTERNAL_SERVER_ERROR, json!({"error": e})),
         },
         None => json_response(StatusCode::NOT_FOUND, json!({"error": "no update is available"})),
+    }
+}
+
+async fn admin_update_apply(
+    State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Response {
+    if let Some(r) = loopback_only(&addr) {
+        return r;
+    }
+    logging::info("update requested: downloading and staging the new server");
+    match crate::updates::apply(&state.http).await {
+        Ok(v) => {
+            logging::info(format!(
+                "update staged: v{}",
+                v.get("latest").and_then(|l| l.as_str()).unwrap_or("?")
+            ));
+            json_response(StatusCode::OK, v)
+        }
+        Err(e) => {
+            logging::warn(format!("update apply failed: {e}"));
+            json_response(StatusCode::BAD_REQUEST, json!({"error": e}))
+        }
     }
 }

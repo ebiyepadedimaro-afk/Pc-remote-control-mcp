@@ -7,7 +7,7 @@ import AboutPage from "./src/pages/About";
 import LogsPage from "./src/pages/Logs";
 import ServerPage from "./src/pages/Server";
 import SettingsPage from "./src/pages/Settings";
-import { checkUpdates, init, notice, openUpdate, phase, status, updateDismissed, updateInfo } from "./src/store";
+import { applyUpdate, checkUpdates, init, notice, phase, status, updateDismissed, updateInfo } from "./src/store";
 
 const TABS = [
   { id: "server", label: "Server" },
@@ -115,8 +115,11 @@ function App() {
               Update available: v{String(updateInfo()?.latest ?? "")} (current v{String(updateInfo()?.current ?? "")}).
             </Text>
             <View class="flex-row flex-wrap gap-2">
-              <Button class="rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90" onPress={() => void openUpdate()}>
-                <Text class="text-sm text-primary-foreground">Download update</Text>
+              <Button
+                class="rounded-md bg-primary px-3 py-1.5 hover:bg-primary/90 disabled:opacity-50"
+                onPress={() => void applyUpdate()}
+              >
+                <Text class="text-sm text-primary-foreground">Update & restart</Text>
               </Button>
               <Button
                 class="rounded-md border border-border px-3 py-1.5 hover:bg-accent"
