@@ -43,9 +43,12 @@ function App() {
   });
 
   effect(() => {
+    const up = status() !== null;
+    const dot = up ? "#22c55e" : phase() === "starting" ? "#f59e0b" : "#ef4444";
     Tray.set({
       icon: appIcon,
       tooltip: "PC Remote Control — MCP server",
+      title: [{ text: up ? "● " : "○ ", color: dot }],
       onClick: showMainWindow,
       menu: [
         { label: "Show window", onSelect: showMainWindow },

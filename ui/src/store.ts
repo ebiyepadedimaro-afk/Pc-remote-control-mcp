@@ -395,6 +395,15 @@ export function patchSection<K extends keyof Config>(key: K, patch: Partial<Conf
   dirty.set(true);
 }
 
+export function toggleTool(name: string, enabled: boolean): void {
+  const c = cfg();
+  if (!c) return;
+  const set = new Set(c.tools.disabled);
+  if (enabled) set.delete(name);
+  else set.add(name);
+  patchConfig({ tools: { disabled: Array.from(set) } });
+}
+
 export function toggleToolGroup(names: string[], enabled: boolean): void {
   const c = cfg();
   if (!c) return;

@@ -64,6 +64,9 @@ pub struct ShellConfig {
 pub struct FilesConfig {
     /// Restrict file tools to this directory (empty = the whole filesystem).
     pub root: String,
+    /// Folders file tools may never touch, even when root is empty
+    /// (e.g. ~/.ssh, ~/.aws). Paths starting with ~ are expanded.
+    pub protected: Vec<String>,
     pub allow_write: bool,
     pub allow_delete: bool,
     pub max_read_bytes: u64,
@@ -181,11 +184,22 @@ pub struct TunnelConfig {
     pub ngrok_authtoken: String,
     /// Optional `tailscaled` socket for a bundled/userspace daemon.
     pub tailscale_socket: String,
+    /// Cloudflare named-tunnel token (Zero Trust dashboard) for "Your Domain".
+    pub cloudflare_token: String,
+    /// The public hostname mapped to that tunnel (e.g. mcp.example.com).
+    pub cloudflare_hostname: String,
 }
 
 impl Default for TunnelConfig {
     fn default() -> Self {
-        Self { kind: "auto".into(), auto_start: false, ngrok_authtoken: String::new(), tailscale_socket: String::new() }
+        Self {
+            kind: "auto".into(),
+            auto_start: false,
+            ngrok_authtoken: String::new(),
+            tailscale_socket: String::new(),
+            cloudflare_token: String::new(),
+            cloudflare_hostname: String::new(),
+        }
     }
 }
 
@@ -252,6 +266,18 @@ impl Default for FilesConfig {
     fn default() -> Self {
         Self {
             root: String::new(),
+            protected: vec![
+                "~/.ssh".into(),
+                "~/.aws".into(),
+                "~/.gnupg".into(),
+                "~/.kube".into(),
+                "~/.config/gcloud".into(),
+                "~/.azure".into(),
+                "~/.docker".into(),
+                "~/.netrc".into(),
+                "~/.vault-token".into(),
+                "~/Library/Keychains".into(),
+            ],
             allow_write: true,
             allow_delete: true,
             max_read_bytes: 10 * 1024 * 1024,
@@ -323,6 +349,14 @@ impl Config {
         self.system.max_delay_secs = self.system.max_delay_secs.clamp(0, 86_400);
         self.tunnel.ngrok_authtoken = self.tunnel.ngrok_authtoken.trim().to_string();
         self.tunnel.tailscale_socket = self.tunnel.tailscale_socket.trim().to_string();
+        self.tunnel.cloudflare_token = self.tunnel.cloudflare_token.trim().to_string();
+        self.tunnel.cloudflare_hostname = self
+            .tunnel
+            .cloudflare_hostname
+            .trim()
+            .trim_start_matches("https://")
+            .trim_end_matches('/')
+            .to_string();
         self.tunnel.kind = match self.tunnel.kind.trim().to_ascii_lowercase().as_str() {
             "cloudflared" => "cloudflared".into(),
             "tailscale" => "tailscale".into(),

@@ -10,6 +10,30 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
+/// Protected folders (config `files.protected`) are refused for every file
+/// operation, even when the files root is wide open.
+fn ensure_not_protected(state: &AppState, path: &Path) -> Result<(), String> {
+    let cfg = state.config.get();
+    if cfg.files.protected.is_empty() {
+        return Ok(());
+    }
+    for raw in &cfg.files.protected {
+        let expanded = expand_path(raw.trim());
+        if expanded.is_empty() {
+            continue;
+        }
+        let prot = PathBuf::from(&expanded);
+        if path.starts_with(&prot) || path == prot {
+            return Err(format!(
+                "{} is inside the protected folder `{}` (files.protected)",
+                path.display(),
+                expanded
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn resolve(state: &AppState, raw: &str, for_write: bool) -> Result<PathBuf, String> {
     if raw.trim().is_empty() {
         return Err("path is empty".into());
@@ -81,6 +105,7 @@ fn modified_ms(meta: &std::fs::Metadata) -> Option<u64> {
 pub async fn list_directory(state: Arc<AppState>, args: serde_json::Value) -> Result<ToolOutput, String> {
     let raw = arg_str(&args, "path").ok_or("path is required")?;
     let path = resolve(&state, raw, false)?;
+    ensure_not_protected(&state, &path)?;
     if !path.is_dir() {
         return Err(format!("{} is not a directory", path.display()));
     }
@@ -145,6 +170,7 @@ pub async fn list_directory(state: Arc<AppState>, args: serde_json::Value) -> Re
 pub async fn read_file(state: Arc<AppState>, args: serde_json::Value) -> Result<ToolOutput, String> {
     let raw = arg_str(&args, "path").ok_or("path is required")?;
     let path = resolve(&state, raw, false)?;
+    ensure_not_protected(&state, &path)?;
     let cfg = state.config.get();
     let max = arg_u32(&args, "max_bytes")
         .map(|m| m as u64)
@@ -199,6 +225,7 @@ pub async fn write_file(state: Arc<AppState>, args: serde_json::Value) -> Result
         ));
     }
     let path = resolve(&state, raw, true)?;
+    ensure_not_protected(&state, &path)?;
     if arg_bool(&args, "create_parents", true) {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
@@ -219,6 +246,7 @@ pub async fn delete_path(state: Arc<AppState>, args: serde_json::Value) -> Resul
     }
     let raw = arg_str(&args, "path").ok_or("path is required")?;
     let path = resolve(&state, raw, true)?;
+    ensure_not_protected(&state, &path)?;
     let home = dirs::home_dir();
     if path == Path::new("/") || Some(&path) == home.as_ref() || path.as_os_str().is_empty() {
         return Err("refusing to delete a filesystem root or the home directory".into());
@@ -245,6 +273,8 @@ pub async fn move_path(state: Arc<AppState>, args: serde_json::Value) -> Result<
     }
     let from = resolve(&state, arg_str(&args, "from").ok_or("from is required")?, true)?;
     let to = resolve(&state, arg_str(&args, "to").ok_or("to is required")?, true)?;
+    ensure_not_protected(&state, &from)?;
+    ensure_not_protected(&state, &to)?;
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     }
@@ -292,6 +322,8 @@ pub async fn copy_path(state: Arc<AppState>, args: serde_json::Value) -> Result<
     }
     let from = resolve(&state, arg_str(&args, "from").ok_or("from is required")?, false)?;
     let to = resolve(&state, arg_str(&args, "to").ok_or("to is required")?, true)?;
+    ensure_not_protected(&state, &from)?;
+    ensure_not_protected(&state, &to)?;
     let bytes = copy_tree(&from, &to, 0)?;
     Ok(ToolOutput::json(json!({
         "ok": true,
@@ -307,12 +339,14 @@ pub async fn make_directory(state: Arc<AppState>, args: serde_json::Value) -> Re
         return Err("file writes are disabled in the server configuration".into());
     }
     let path = resolve(&state, arg_str(&args, "path").ok_or("path is required")?, true)?;
+    ensure_not_protected(&state, &path)?;
     std::fs::create_dir_all(&path).map_err(|e| format!("cannot create {}: {e}", path.display()))?;
     Ok(ToolOutput::json(json!({"ok": true, "path": path.to_string_lossy()})))
 }
 
 pub async fn file_info(state: Arc<AppState>, args: serde_json::Value) -> Result<ToolOutput, String> {
     let path = resolve(&state, arg_str(&args, "path").ok_or("path is required")?, false)?;
+    ensure_not_protected(&state, &path)?;
     let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("cannot stat {}: {e}", path.display()))?;
     let ft = meta.file_type();
     let mut info = json!({
@@ -363,6 +397,7 @@ pub async fn download_from_url(state: Arc<AppState>, args: serde_json::Value) ->
     let url_str = arg_str(&args, "url").ok_or("url is required")?;
     let dest_raw = arg_str(&args, "path").ok_or("path is required")?;
     let dest = resolve(&state, dest_raw, true)?;
+    ensure_not_protected(&state, &dest)?;
     let max = arg_u32(&args, "max_bytes")
         .map(|m| m as u64)
         .unwrap_or(cfg.downloads.max_bytes)

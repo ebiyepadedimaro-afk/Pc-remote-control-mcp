@@ -227,10 +227,12 @@ async fn main() {
             let kind = if cfg.tunnel.kind.trim().is_empty() { "auto".to_string() } else { cfg.tunnel.kind.clone() };
             let token = cfg.tunnel.ngrok_authtoken.clone();
             let socket = cfg.tunnel.tailscale_socket.clone();
+            let cf_token = cfg.tunnel.cloudflare_token.clone();
+            let cf_host = cfg.tunnel.cloudflare_hostname.clone();
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 logging::info(format!("starting automatic {kind} tunnel..."));
-                match tunnel::start(&kind, st.port, &token, &socket).await {
+                match tunnel::start(&kind, st.port, &token, &socket, &cf_token, &cf_host).await {
                     Ok(s) => {
                         let tstate = s.get("state").and_then(|v| v.as_str()).unwrap_or("?");
                         match s.get("url").and_then(|u| u.as_str()) {

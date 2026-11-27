@@ -2,6 +2,7 @@ import { signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { Card, CopyButton, NumberField, Row, SelectField, SwitchRow, TextField } from "../components";
 import { TOOL_GROUPS, groupEnabled } from "../format";
+import type { ToolDef } from "../types";
 import {
   busy,
   cfg,
@@ -14,6 +15,7 @@ import {
   saveSettings,
   settings,
   status,
+  toggleTool,
   toggleToolGroup,
 } from "../store";
 
@@ -111,7 +113,7 @@ export default function SettingsPage() {
               </Row>
             </Card>
 
-            <Card title="Tools" subtitle="Disable tool groups an MCP client should never use">
+            <Card title="Tools" subtitle="Disable tool groups an MCP client should never use, or single tools in the library below">
               <View class="flex-row flex-wrap gap-x-6">
                 <Each of={TOOL_GROUPS} key={(g) => g.key}>
                   {(g) => (
@@ -120,6 +122,19 @@ export default function SettingsPage() {
                         label={g().label}
                         checked={groupEnabled(c().tools.disabled, g())}
                         onChange={(v) => toggleToolGroup(g().names, v)}
+                      />
+                    </View>
+                  )}
+                </Each>
+              </View>
+              <View class="flex-row flex-wrap gap-x-6">
+                <Each of={status()?.tool_names ?? []} key={(n) => n}>
+                  {(n) => (
+                    <View class="min-w-56 flex-1">
+                      <SwitchRow
+                        label={n()}
+                        checked={!c().tools.disabled.includes(n())}
+                        onChange={(v) => toggleTool(n(), v)}
                       />
                     </View>
                   )}
@@ -179,6 +194,17 @@ export default function SettingsPage() {
                   value={c().files.root}
                   onChange={(v) => patchSection("files", { root: v })}
                   className="min-w-80"
+                />
+                <TextField
+                  label="Protected folders (comma separated)"
+                  value={c().files.protected.join(", ")}
+                  onChange={(v) =>
+                    patchSection("files", {
+                      protected: v.split(",").map((s) => s.trim()).filter((s) => s.length > 0),
+                    })
+                  }
+                  hint="File tools refuse these folders even when the root is empty (~ is expanded)."
+                  className="min-w-96"
                 />
               </View>
               <SwitchRow label="Allow file writes" checked={c().files.allow_write} onChange={(v) => patchSection("files", { allow_write: v })} />

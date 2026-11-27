@@ -228,6 +228,7 @@ async fn admin_status(
         "token": if cfg.token_enabled { Value::String(cfg.token.clone()) } else { Value::Null },
         "approval": if cfg.token_enabled { "token" } else { "always" },
         "tool_prefix": cfg.tool_prefix,
+        "tool_names": crate::tools::specs().iter().map(|t| t.name.to_string()).collect::<Vec<_>>(),
         "tools": {
             "total": crate::tools::specs().len(),
             "enabled": crate::tools::specs().iter().filter(|t| cfg.tool_enabled(t.name)).count(),
@@ -431,7 +432,14 @@ async fn admin_tunnel_action(
                     }),
                 );
             }
-            match crate::tunnel::start(req.kind.as_deref().unwrap_or("auto"), state.port, &cfg.tunnel.ngrok_authtoken, &cfg.tunnel.tailscale_socket).await {
+            match crate::tunnel::start(
+                req.kind.as_deref().unwrap_or("auto"),
+                state.port,
+                &cfg.tunnel.ngrok_authtoken,
+                &cfg.tunnel.tailscale_socket,
+                &cfg.tunnel.cloudflare_token,
+                &cfg.tunnel.cloudflare_hostname,
+            ).await {
                 Ok(s) => {
                     logging::warn(format!("remote-access tunnel started: {}", s.get("kind").and_then(|k| k.as_str()).unwrap_or("?")));
                     json_response(StatusCode::OK, s)

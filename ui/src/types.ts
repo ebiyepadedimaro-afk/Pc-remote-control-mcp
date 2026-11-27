@@ -16,6 +16,7 @@ export interface ShellConfig {
 
 export interface FilesConfig {
   root: string;
+  protected: string[];
   allow_write: boolean;
   allow_delete: boolean;
   max_read_bytes: number;
@@ -67,6 +68,8 @@ export interface TunnelConfig {
   auto_start: boolean;
   ngrok_authtoken: string;
   tailscale_socket: string;
+  cloudflare_token: string;
+  cloudflare_hostname: string;
 }
 
 export interface ToolsConfig {
@@ -113,6 +116,7 @@ export interface Status {
   token: string | null;
   approval: string;
   tool_prefix: string;
+  tool_names: string[];
   tools: { total: number; enabled: number; disabled: string[] };
   stats: {
     mcp_requests: number;

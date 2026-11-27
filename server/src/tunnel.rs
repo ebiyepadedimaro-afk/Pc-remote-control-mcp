@@ -248,7 +248,14 @@ async fn tailscale_dns(bin: &PathBuf, socket: &str) -> Result<String, String> {
     Ok(dns)
 }
 
-pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tailscale_socket: &str) -> Result<Value, String> {
+pub async fn start(
+    requested_kind: &str,
+    port: u16,
+    ngrok_authtoken: &str,
+    tailscale_socket: &str,
+    cloudflare_token: &str,
+    cloudflare_hostname: &str,
+) -> Result<Value, String> {
     let busy = {
         let g = info().lock().unwrap();
         g.state == "running" || g.state == "starting" || g.state == "stopping"
@@ -310,15 +317,26 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
             Ok(status())
         }
         "cloudflared" | "ngrok" => {
+            let named = kind == "cloudflared" && !cloudflare_token.trim().is_empty();
             let (program, args): (PathBuf, Vec<String>) = if kind == "cloudflared" {
                 (
                     crate::tools::which("cloudflared").ok_or_else(|| install_hint("cloudflared"))?,
-                    vec![
-                        "tunnel".into(),
-                        "--no-autoupdate".into(),
-                        "--url".into(),
-                        format!("http://127.0.0.1:{port}"),
-                    ],
+                    if named {
+                        vec![
+                            "tunnel".into(),
+                            "--no-autoupdate".into(),
+                            "run".into(),
+                            "--token".into(),
+                            cloudflare_token.trim().to_string(),
+                        ]
+                    } else {
+                        vec![
+                            "tunnel".into(),
+                            "--no-autoupdate".into(),
+                            "--url".into(),
+                            format!("http://127.0.0.1:{port}"),
+                        ]
+                    },
                 )
             } else {
                 (
@@ -368,6 +386,12 @@ pub async fn start(requested_kind: &str, port: u16, ngrok_authtoken: &str, tails
                 };
             }
 
+            if named {
+                let host = cloudflare_hostname.trim().to_string();
+                if !host.is_empty() {
+                    set_url(format!("https://{host}"));
+                }
+            }
             let kind_for_logs = kind.clone();
             if let Some(stdout) = child.stdout.take() {
                 tokio::spawn(async move {
