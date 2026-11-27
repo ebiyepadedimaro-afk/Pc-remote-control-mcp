@@ -184,7 +184,7 @@ jobs:
             "/DSourceDir=$dir" `
             "/DIconFile=$PWD\ui\assets\icon.ico" `
             "/DOutDir=$PWD\out" `
-            paperwork\windows\pcrc.iss
+            packaging\windows\pcrc.iss
           Get-ChildItem out | Select-Object Name, Length
       - uses: softprops/action-gh-release@v2
         with:
